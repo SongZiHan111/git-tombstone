@@ -1,0 +1,24 @@
+#!/bin/sh
+# git-tombstone · DEADENDS date gate (pre-commit hook)
+# 新增行中的 [YYYY-MM-DD] 必须是今天或昨天，否则拒绝提交。
+# 用法：拷贝到你的仓库 .git/hooks/pre-commit（无扩展名，重克隆后需重装）
+#
+# 踩坑实录（血泪换来的，改前先读）：
+# 1) Windows 下直接用 sh 跑会缺 PATH（date/grep/tr 全找不到）——
+#    所以下面两行必须自设 PATH（Git for Windows 标准布局）
+# 2) 年份正则别写成 20[0-9][2-9]——2020 年会被漏掉（真踩过）
+# 3) 钩子被误写成空文件时，git 报 cannot spawn 并拒绝提交——重写即可
+# 4) 容差 ±1 天（跨午夜）；条目的权威日期永远是 git blame
+
+PATH="/mingw64/bin:/usr/bin:$PATH"
+export PATH
+TODAY=$(date +%F)
+YDAY=$(date -d yesterday +%F 2>/dev/null || date -v-1d +%F 2>/dev/null || echo "$TODAY")
+BAD=$(git diff --cached --unified=0 -- docs/DEADENDS.md 2>/dev/null | grep '^+' | grep -oE '\[20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]\]' | tr -d '[]' | sort -u)
+for d in $BAD; do
+  if [ "$d" != "$TODAY" ] && [ "$d" != "$YDAY" ]; then
+    echo "[DEADENDS date gate] new date $d is not today($TODAY) or yesterday($YDAY). Run date, fix, retry."
+    exit 1
+  fi
+done
+exit 0
